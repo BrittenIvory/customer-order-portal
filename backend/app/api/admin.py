@@ -50,13 +50,16 @@ def create_user(
 def update_user(
     user_id: int,
     req: UserUpdate,
-    _: User = Depends(get_admin_user),
+    current_admin: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    for field, value in req.model_dump(exclude_unset=True).items():
+    updates = req.model_dump(exclude_unset=True)
+    if user_id == current_admin.id and updates.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    for field, value in updates.items():
         setattr(user, field, value)
     db.commit()
     db.refresh(user)
@@ -66,9 +69,11 @@ def update_user(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
-    _: User = Depends(get_admin_user),
+    current_admin: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
+    if user_id == current_admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
