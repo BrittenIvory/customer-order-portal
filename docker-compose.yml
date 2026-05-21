@@ -32,7 +32,7 @@ services:
       MYOB_PASSWORD: ${MYOB_PASSWORD:-}
       MYOB_COMPANY: ${MYOB_COMPANY:-}
       MYOB_BRANCH: ${MYOB_BRANCH:-}
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
 
@@ -42,7 +42,8 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      NEXT_PUBLIC_API_URL: /api
+      BACKEND_URL: http://backend:8000
     ports:
       - "3000:3000"
 
