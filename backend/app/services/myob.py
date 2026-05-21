@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -18,8 +19,17 @@ class MYOBClient:
         self.api_endpoint = f"{self.base_url}/entity/Default/24.200.001"
         self.client = httpx.AsyncClient(timeout=MYOB_TIMEOUT)
         self._cookies: httpx.Cookies | None = None
+        self._login_lock = asyncio.Lock()
 
-    async def login(self) -> None:
+    async def _ensure_logged_in(self) -> None:
+        if self._cookies:
+            return
+        async with self._login_lock:
+            if self._cookies:
+                return
+            await self._do_login()
+
+    async def _do_login(self) -> None:
         url = f"{self.base_url}/entity/auth/login"
         payload = {
             "name": settings.MYOB_USERNAME,
@@ -33,6 +43,13 @@ class MYOBClient:
         self._cookies = resp.cookies
         logger.info("Logged in to MYOB Advanced")
 
+    async def _relogin_and_retry(
+        self, url: str, params: dict[str, str] | None
+    ) -> httpx.Response:
+        async with self._login_lock:
+            await self._do_login()
+        return await self.client.get(url, params=params, cookies=self._cookies)
+
     async def logout(self) -> None:
         url = f"{self.base_url}/entity/auth/logout"
         await self.client.post(url, cookies=self._cookies)
@@ -41,13 +58,11 @@ class MYOBClient:
     async def _get(
         self, entity: str, params: dict[str, str] | None = None
     ) -> list[dict[str, Any]]:
-        if not self._cookies:
-            await self.login()
+        await self._ensure_logged_in()
         url = f"{self.api_endpoint}/{entity}"
         resp = await self.client.get(url, params=params, cookies=self._cookies)
         if resp.status_code == 401:
-            await self.login()
-            resp = await self.client.get(url, params=params, cookies=self._cookies)
+            resp = await self._relogin_and_retry(url, params)
         resp.raise_for_status()
         data = resp.json()
         return data if isinstance(data, list) else [data]
@@ -55,13 +70,11 @@ class MYOBClient:
     async def _get_single(
         self, entity: str, key: str
     ) -> dict[str, Any] | None:
-        if not self._cookies:
-            await self.login()
+        await self._ensure_logged_in()
         url = f"{self.api_endpoint}/{entity}/{key}"
         resp = await self.client.get(url, cookies=self._cookies)
         if resp.status_code == 401:
-            await self.login()
-            resp = await self.client.get(url, cookies=self._cookies)
+            resp = await self._relogin_and_retry(url, None)
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -76,14 +89,12 @@ class MYOBClient:
         return await self._get("SalesOrder", params)
 
     async def get_sales_order(self, order_nbr: str) -> dict[str, Any] | None:
+        await self._ensure_logged_in()
         params = {"$expand": "Details"}
-        if not self._cookies:
-            await self.login()
         url = f"{self.api_endpoint}/SalesOrder/SO/{order_nbr}"
         resp = await self.client.get(url, params=params, cookies=self._cookies)
         if resp.status_code == 401:
-            await self.login()
-            resp = await self.client.get(url, params=params, cookies=self._cookies)
+            resp = await self._relogin_and_retry(url, params)
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -100,14 +111,12 @@ class MYOBClient:
     async def get_purchase_order(
         self, order_nbr: str
     ) -> dict[str, Any] | None:
+        await self._ensure_logged_in()
         params = {"$expand": "Details"}
-        if not self._cookies:
-            await self.login()
         url = f"{self.api_endpoint}/PurchaseOrder/PO/{order_nbr}"
         resp = await self.client.get(url, params=params, cookies=self._cookies)
         if resp.status_code == 401:
-            await self.login()
-            resp = await self.client.get(url, params=params, cookies=self._cookies)
+            resp = await self._relogin_and_retry(url, params)
         if resp.status_code == 404:
             return None
         resp.raise_for_status()

@@ -85,6 +85,36 @@ def _overall_status(statuses: list[OrderStatus]) -> OrderStatus:
     return STATUS_ORDER[earliest_index]
 
 
+async def _fetch_po_cached(
+    po_nbr: str, cache: dict[str, dict[str, Any] | None]
+) -> dict[str, Any] | None:
+    if po_nbr in cache:
+        return cache[po_nbr]
+    try:
+        po = await myob_client.get_purchase_order(po_nbr)
+    except Exception:
+        logger.warning("Failed to fetch PO %s", po_nbr)
+        po = None
+    cache[po_nbr] = po
+    return po
+
+
+def _resolve_po_line(
+    po: dict[str, Any] | None, inventory_id: str
+) -> tuple[dict[str, Any] | None, bool]:
+    if po is None:
+        return None, False
+    for po_det in po.get("Details", []):
+        if _val(po_det.get("InventoryID")) == inventory_id:
+            received_qty = _val(po_det.get("ReceivedQty", 0))
+            order_qty = _val(po_det.get("OrderQty", 0))
+            is_received = bool(
+                received_qty and order_qty and received_qty >= order_qty
+            )
+            return po_det, is_received
+    return None, False
+
+
 async def get_customer_orders(
     customer_id: str, db: Session
 ) -> list[OrderSummary]:
@@ -94,7 +124,9 @@ async def get_customer_orders(
         logger.exception("Failed to fetch sales orders from MYOB")
         return []
 
+    po_cache: dict[str, dict[str, Any] | None] = {}
     summaries: list[OrderSummary] = []
+
     for so in sales_orders:
         order_nbr = _val(so.get("OrderNbr", ""))
         details = so.get("Details", [])
@@ -102,9 +134,20 @@ async def get_customer_orders(
         line_statuses: list[OrderStatus] = []
         for line in details:
             line_nbr = _val(line.get("LineNbr", 0))
+            inventory_id = _val(line.get("InventoryID", ""))
             is_invoiced = _val(so.get("Status", "")) == "Invoiced"
             is_inspected = _is_line_inspected(db, order_nbr, line_nbr)
-            status = _determine_line_status(None, False, is_inspected, is_invoiced)
+
+            po_order_nbr = _val(line.get("POOrderNbr"))
+            po_line = None
+            is_received = False
+            if po_order_nbr:
+                po = await _fetch_po_cached(po_order_nbr, po_cache)
+                po_line, is_received = _resolve_po_line(po, inventory_id)
+
+            status = _determine_line_status(
+                po_line, is_received, is_inspected, is_invoiced
+            )
             line_statuses.append(status)
 
         summaries.append(
@@ -141,6 +184,7 @@ async def get_order_detail(
 
     details = so.get("Details", [])
     lines: list[OrderLineItem] = []
+    po_cache: dict[str, dict[str, Any] | None] = {}
 
     for line in details:
         line_nbr = _val(line.get("LineNbr", 0))
@@ -162,24 +206,11 @@ async def get_order_detail(
         is_received = False
 
         if po_order_nbr:
-            try:
-                po = await myob_client.get_purchase_order(po_order_nbr)
-                if po:
-                    po_details = po.get("Details", [])
-                    for po_det in po_details:
-                        if _val(po_det.get("InventoryID")) == inventory_id:
-                            po_line = po_det
-                            po_requested_date = _parse_date(
-                                po_det.get("RequestedDate")
-                            )
-                            received_qty = _val(po_det.get("ReceivedQty", 0))
-                            order_qty = _val(po_det.get("OrderQty", 0))
-                            if received_qty and order_qty and received_qty >= order_qty:
-                                is_received = True
-                            break
-            except Exception:
-                logger.warning(
-                    "Failed to fetch PO %s for SO line", po_order_nbr
+            po = await _fetch_po_cached(po_order_nbr, po_cache)
+            po_line, is_received = _resolve_po_line(po, inventory_id)
+            if po_line:
+                po_requested_date = _parse_date(
+                    po_line.get("RequestedDate")
                 )
 
         status = _determine_line_status(
