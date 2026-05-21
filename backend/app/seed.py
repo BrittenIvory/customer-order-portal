@@ -1,13 +1,13 @@
 """Seed script to create initial admin user."""
 
-import sys
-
 from app.core.security import get_password_hash
-from app.database import SessionLocal
-from app.models.user import User
+from app.database import Base, SessionLocal, engine
+from app.models.user import User  # noqa: F401 — registers model
+from app.models.inspection import InspectionRecord  # noqa: F401 — registers model
 
 
 def seed():
+    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         admin = db.query(User).filter(User.is_admin.is_(True)).first()
