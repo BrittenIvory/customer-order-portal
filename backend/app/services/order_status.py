@@ -135,7 +135,7 @@ async def get_customer_orders(
         for line in details:
             line_nbr = _val(line.get("LineNbr", 0))
             inventory_id = _val(line.get("InventoryID", ""))
-            is_invoiced = _val(so.get("Status", "")) == "Invoiced"
+            is_invoiced = _val(line.get("Invoiced", False)) or _val(so.get("Status", "")) == "Invoiced"
             is_inspected = _is_line_inspected(db, order_nbr, line_nbr)
 
             po_order_nbr = _val(line.get("POOrderNbr"))

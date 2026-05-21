@@ -45,15 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (didInit.current) return;
     didInit.current = true;
 
-    let cancelled = false;
     loadCurrentUser().then((me) => {
-      if (cancelled) return;
       setUser(me);
       setLoading(false);
     });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const login = async (email: string, password: string) => {
