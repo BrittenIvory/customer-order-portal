@@ -47,6 +47,7 @@ class MYOBClient:
         self, url: str, params: dict[str, str] | None
     ) -> httpx.Response:
         async with self._login_lock:
+            self._cookies = None
             await self._do_login()
         return await self.client.get(url, params=params, cookies=self._cookies)
 

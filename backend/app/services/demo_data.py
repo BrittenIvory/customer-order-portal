@@ -9,14 +9,12 @@ from app.schemas.order import (
     OrderSummary,
 )
 
-now = datetime.now(timezone.utc)
-
-
 def _dt(days_offset: int) -> datetime:
-    return now + timedelta(days=days_offset)
+    return datetime.now(timezone.utc) + timedelta(days=days_offset)
 
 
-DEMO_ORDERS: dict[str, OrderDetail] = {
+def _build_demo_orders() -> dict[str, OrderDetail]:
+    return {
     "SO-001042": OrderDetail(
         order_nbr="SO-001042",
         order_date=_dt(-120),
@@ -251,12 +249,13 @@ DEMO_ORDERS: dict[str, OrderDetail] = {
             ),
         ],
     ),
-}
+    }
 
 
 def get_demo_order_summaries() -> list[OrderSummary]:
+    orders = _build_demo_orders()
     summaries = []
-    for o in DEMO_ORDERS.values():
+    for o in orders.values():
         summaries.append(
             OrderSummary(
                 order_nbr=o.order_nbr,
@@ -274,4 +273,4 @@ def get_demo_order_summaries() -> list[OrderSummary]:
 
 
 def get_demo_order_detail(order_nbr: str) -> OrderDetail | None:
-    return DEMO_ORDERS.get(order_nbr)
+    return _build_demo_orders().get(order_nbr)
