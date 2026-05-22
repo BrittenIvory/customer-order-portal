@@ -56,7 +56,13 @@ def update_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _NON_NULLABLE = {"full_name", "is_active"}
     updates = req.model_dump(exclude_unset=True)
+    for key in _NON_NULLABLE:
+        if key in updates and updates[key] is None:
+            raise HTTPException(
+                status_code=422, detail=f"{key} cannot be null"
+            )
     if user_id == current_admin.id and "is_active" in updates and not updates["is_active"]:
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
     for field, value in updates.items():

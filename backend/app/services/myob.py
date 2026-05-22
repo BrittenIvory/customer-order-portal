@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 MYOB_TIMEOUT = 30.0
 
 
+def _odata_escape(val: str) -> str:
+    return val.replace("'", "''")
+
+
 class MYOBClient:
     """Client for MYOB Advanced (Acumatica) contract-based REST API."""
 
@@ -46,9 +50,11 @@ class MYOBClient:
     async def _relogin_and_retry(
         self, url: str, params: dict[str, str] | None
     ) -> httpx.Response:
+        old_cookies = self._cookies
         async with self._login_lock:
-            self._cookies = None
-            await self._do_login()
+            if self._cookies is old_cookies:
+                self._cookies = None
+                await self._do_login()
         return await self.client.get(url, params=params, cookies=self._cookies)
 
     async def logout(self) -> None:
@@ -86,7 +92,7 @@ class MYOBClient:
     ) -> list[dict[str, Any]]:
         params: dict[str, str] = {"$expand": "Details"}
         if customer_id:
-            params["$filter"] = f"CustomerID eq '{customer_id}'"
+            params["$filter"] = f"CustomerID eq '{_odata_escape(customer_id)}'"
         return await self._get("SalesOrder", params)
 
     async def get_sales_order(self, order_nbr: str) -> dict[str, Any] | None:
@@ -106,7 +112,7 @@ class MYOBClient:
     ) -> list[dict[str, Any]]:
         params: dict[str, str] = {"$expand": "Details"}
         if vendor_ref:
-            params["$filter"] = f"VendorRef eq '{vendor_ref}'"
+            params["$filter"] = f"VendorRef eq '{_odata_escape(vendor_ref)}'"
         return await self._get("PurchaseOrder", params)
 
     async def get_purchase_order(
@@ -134,7 +140,7 @@ class MYOBClient:
     ) -> list[dict[str, Any]]:
         params: dict[str, str] = {"$expand": "Details"}
         if customer_id:
-            params["$filter"] = f"CustomerID eq '{customer_id}'"
+            params["$filter"] = f"CustomerID eq '{_odata_escape(customer_id)}'"
         return await self._get("Invoice", params)
 
 
