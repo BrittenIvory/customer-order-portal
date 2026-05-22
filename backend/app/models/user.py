@@ -12,7 +12,7 @@ class User(Base):
     full_name = Column(String(255), nullable=False)
     company_name = Column(String(255), nullable=True)
     myob_customer_id = Column(String(50), nullable=True, index=True)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

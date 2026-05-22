@@ -57,7 +57,7 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     updates = req.model_dump(exclude_unset=True)
-    if user_id == current_admin.id and updates.get("is_active") is False:
+    if user_id == current_admin.id and "is_active" in updates and not updates["is_active"]:
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
     for field, value in updates.items():
         setattr(user, field, value)
